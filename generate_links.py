@@ -108,6 +108,10 @@ def sync_to_github_safe():
         synced_files, synced_dirs = get_synced_paths(orig_dir)
         for d in sorted(synced_dirs):
             os.makedirs(d, exist_ok=True)
+            # Если папка пуста — добавляем .gitkeep
+            full_path = os.path.join(d)
+            if not any(os.scandir(full_path)):
+                open(os.path.join(full_path, ".gitkeep"), "w").close()
         for f in synced_files:
             src = os.path.join(orig_dir, f)
             dst = f
