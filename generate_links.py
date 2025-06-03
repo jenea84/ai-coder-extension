@@ -87,6 +87,31 @@ def generate_index_md(target_dir: str = "."):
         f.write(content)
     print(f"✅ Файл {OUTPUT_FILE} успешно сгенерирован в {target_dir}")
 
+def parse_index_md(index_md_path):
+    files = set()
+    dirs = set()
+    stack = ['.']
+    with open(index_md_path, encoding='utf-8') as f:
+        for line in f:
+            line = line.rstrip()
+            if not line.strip().startswith('├──'):
+                continue
+            # Определяем уровень вложенности по количеству отступов (4 пробела)
+            indent_level = (len(line) - len(line.lstrip(' '))) // 4
+            name = line.strip().replace('├── ', '')
+            # Обновляем стек директорий
+            while len(stack) > indent_level + 1:
+                stack.pop()
+            parent = '/'.join(stack[1:]) if len(stack) > 1 else '.'
+            if name.endswith('/'):
+                dir_path = os.path.join(parent, name[:-1]) if parent != '.' else name[:-1]
+                dirs.add(dir_path)
+                stack.append(name[:-1])
+            else:
+                file_path = os.path.join(parent, name) if parent != '.' else name
+                files.add(file_path)
+    return files, dirs
+
 def sync_to_github_safe():
     with tempfile.TemporaryDirectory() as tmpdir:
         print(f"Клонирую репозиторий во временную папку: {tmpdir}")
@@ -95,30 +120,36 @@ def sync_to_github_safe():
         os.chdir(tmpdir)
         subprocess.run(['git', 'checkout', BRANCH], check=True)
 
-        # Удаляем всё кроме .git и исключённых
+        # Удаляем всё кроме .git
         for item in os.listdir('.'):
-            if item == '.git' or should_ignore(pathlib.Path(item)):
+            if item == '.git':
                 continue
             if os.path.isdir(item):
                 shutil.rmtree(item)
             else:
                 os.remove(item)
 
-        # Копируем только нужные файлы и папки из локального проекта (включая свежий INDEX.md)
-        synced_files, synced_dirs = get_synced_paths(orig_dir)
-        for d in sorted(synced_dirs):
+        # Получаем список файлов и папок из локального INDEX.md
+        files, dirs = parse_index_md(os.path.join(orig_dir, OUTPUT_FILE))
+        # Создаём папки
+        for d in sorted(dirs):
+            if d == '.' or d == '':
+                continue
             os.makedirs(d, exist_ok=True)
             # Если папка пуста — добавляем .gitkeep
             full_path = os.path.join(d)
             if not any(os.scandir(full_path)):
                 open(os.path.join(full_path, ".gitkeep"), "w").close()
-        for f in synced_files:
+        # Копируем файлы
+        for f in files:
             src = os.path.join(orig_dir, f)
             dst = f
             dst_dir = os.path.dirname(dst)
             if dst_dir and not os.path.exists(dst_dir):
                 os.makedirs(dst_dir, exist_ok=True)
             shutil.copy2(src, dst)
+        # Копируем сам INDEX.md
+        shutil.copy2(os.path.join(orig_dir, OUTPUT_FILE), OUTPUT_FILE)
 
         # git add, commit, push
         subprocess.run(['git', 'add', '.'], check=True)
