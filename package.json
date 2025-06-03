@@ -1,0 +1,47 @@
+{
+  "name": "ai-coder",
+  "displayName": "AI Coder",
+  "description": "AI помощник для разработчиков",
+  "version": "0.1.0",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-coder-sidebar",
+          "title": "AI Coder",
+          "icon": "resources/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "ai-coder-sidebar": [
+        {
+          "id": "ai-coder.view",
+          "name": "AI Coder",
+          "icon": "resources/icon.png"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.100.0",
+    "@types/node": "20.x",
+    "typescript": "^5.8.3"
+  }
+}
