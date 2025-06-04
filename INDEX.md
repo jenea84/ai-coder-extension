@@ -16,6 +16,8 @@
         ├── test/
 ```
 
+**[Raw INDEX.md](https://raw.githubusercontent.com/jenea84/ai-coder-extension/main/INDEX.md)** | **[INDEX.md на GitHub](https://github.com/jenea84/ai-coder-extension/blob/main/INDEX.md)**
+
 - [1.py](https://raw.githubusercontent.com/jenea84/ai-coder-extension/main/1.py)
 - [INDEX.md](https://raw.githubusercontent.com/jenea84/ai-coder-extension/main/INDEX.md)
 - [generate_links.py](https://raw.githubusercontent.com/jenea84/ai-coder-extension/main/generate_links.py)

@@ -7,22 +7,29 @@ import tempfile
 from datetime import datetime
 
 # ==================== КОНФИГУРАЦИЯ ====================
-REPO_BASE = "https://raw.githubusercontent.com/jenea84/ai-coder-extension/main"
-REPO_URL = "https://github.com/jenea84/ai-coder-extension.git"
-BRANCH = "main"
-SCAN_DIR = "."  # Точка означает текущую директорию
-OUTPUT_FILE = "INDEX.md"
+REPO_BASE = "https://raw.githubusercontent.com/jenea84/ai-coder-extension/main"  # Базовый URL для raw-ссылок
+REPO_URL = "https://github.com/jenea84/ai-coder-extension.git"  # URL репозитория для клонирования
+BRANCH = "main"  # Ветка для синхронизации
+SCAN_DIR = "."  # Корень локального проекта
+OUTPUT_FILE = "INDEX.md"  # Имя индексного файла
+# Папки, которые будут исключены из индекса и синхронизации
 IGNORE_DIRS = {
     '__pycache__', '.git', 'node_modules', 'out', 'dist', '.vscode', 'tmp',
 }
+# Файлы, которые будут исключены из индекса и синхронизации
 IGNORE_FILES = {
     '.DS_Store', 'Thumbs.db', '.env', '*.vsix',
 }
+# Разрешённые расширения файлов для индексации
 ALLOWED_EXTENSIONS = {
     '.ts', '.js', '.json', '.md', '.html', '.css', '.py',
 }
 
 def should_ignore(path: pathlib.Path) -> bool:
+    """
+    Проверяет, нужно ли игнорировать файл/папку на основе настроек исключений.
+    Используется при обходе локального проекта и при очистке временного клона.
+    """
     if path.name.startswith('.'):
         return True
     if path.is_dir() and path.name in IGNORE_DIRS:
@@ -38,10 +45,17 @@ def should_ignore(path: pathlib.Path) -> bool:
     return False
 
 def collect_tree_and_files(startpath: str):
+    """
+    Обходит локальный проект и формирует:
+    - tree_lines: структуру для markdown-дерева
+    - file_links: список raw-ссылок на файлы
+    Только для файлов и папок, не попавших под фильтры should_ignore.
+    """
     tree_lines = []
     file_links = []
     startpath = pathlib.Path(startpath)
     for root, dirs, files in os.walk(startpath):
+        # Фильтруем папки (исключаем ненужные)
         dirs[:] = [d for d in dirs if not should_ignore(pathlib.Path(root) / d)]
         level = pathlib.Path(root).relative_to(startpath).parts
         indent = '    ' * len(level)
@@ -74,20 +88,13 @@ def get_synced_paths(startpath: str):
                 synced_files.add(file_path.relative_to(startpath).as_posix())
     return synced_files, synced_dirs
 
-def generate_index_md(target_dir: str = "."):
-    tree_lines, file_links = collect_tree_and_files(target_dir)
-    content = (
-        "## 🌳 Структура проекта\n"
-        "```markdown\n"
-        f"{chr(10).join(tree_lines)}\n"
-        "```\n\n"
-        + '\n'.join(file_links) + '\n'
-    )
-    with open(os.path.join(target_dir, OUTPUT_FILE), 'w', encoding='utf-8') as f:
-        f.write(content)
-    print(f"✅ Файл {OUTPUT_FILE} успешно сгенерирован в {target_dir}")
-
 def parse_index_md(index_md_path):
+    """
+    Парсит структуру из INDEX.md (markdown-дерево) и возвращает:
+    - files: список файлов
+    - dirs: список папок
+    Используется для точного копирования только нужных файлов/папок в репозиторий.
+    """
     files = set()
     dirs = set()
     stack = ['.']
@@ -96,10 +103,8 @@ def parse_index_md(index_md_path):
             line = line.rstrip()
             if not line.strip().startswith('├──'):
                 continue
-            # Определяем уровень вложенности по количеству отступов (4 пробела)
             indent_level = (len(line) - len(line.lstrip(' '))) // 4
             name = line.strip().replace('├── ', '')
-            # Обновляем стек директорий
             while len(stack) > indent_level + 1:
                 stack.pop()
             parent = '/'.join(stack[1:]) if len(stack) > 1 else '.'
@@ -112,7 +117,35 @@ def parse_index_md(index_md_path):
                 files.add(file_path)
     return files, dirs
 
+def generate_index_md(target_dir: str = "."):
+    """
+    Генерирует файл INDEX.md с:
+    - Деревом структуры проекта
+    - Raw-ссылками на файлы
+    - Ссылкой на raw INDEX.md и на сам INDEX.md
+    """
+    tree_lines, file_links = collect_tree_and_files(target_dir)
+    # Ссылки на сам INDEX.md
+    index_raw_url = f"{REPO_BASE}/{OUTPUT_FILE}"
+    index_github_url = f"https://github.com/jenea84/ai-coder-extension/blob/main/{OUTPUT_FILE}"
+    content = (
+        f"## 🌳 Структура проекта\n"
+        "```markdown\n"
+        f"{chr(10).join(tree_lines)}\n"
+        "```\n\n"
+        f"**[Raw INDEX.md]({index_raw_url})** | **[INDEX.md на GitHub]({index_github_url})**\n\n"
+        + '\n'.join(file_links) + '\n'
+    )
+    with open(os.path.join(target_dir, OUTPUT_FILE), 'w', encoding='utf-8') as f:
+        f.write(content)
+    print(f"✅ Файл {OUTPUT_FILE} успешно сгенерирован в {target_dir}")
+
 def sync_to_github_safe():
+    """
+    Клонирует репозиторий во временную папку, полностью очищает его (кроме .git),
+    затем копирует только те файлы и папки, которые есть в дереве INDEX.md.
+    Пустые папки добавляются с .gitkeep. После этого делает git add/commit/push.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         print(f"Клонирую репозиторий во временную папку: {tmpdir}")
         orig_dir = os.getcwd()
@@ -120,7 +153,7 @@ def sync_to_github_safe():
         os.chdir(tmpdir)
         subprocess.run(['git', 'checkout', BRANCH], check=True)
 
-        # Удаляем всё кроме .git
+        # Удаляем всё кроме .git (репозиторий будет содержать только нужные файлы/папки)
         for item in os.listdir('.'):
             if item == '.git':
                 continue
@@ -131,12 +164,11 @@ def sync_to_github_safe():
 
         # Получаем список файлов и папок из локального INDEX.md
         files, dirs = parse_index_md(os.path.join(orig_dir, OUTPUT_FILE))
-        # Создаём папки
+        # Создаём папки (и .gitkeep для пустых)
         for d in sorted(dirs):
             if d == '.' or d == '':
                 continue
             os.makedirs(d, exist_ok=True)
-            # Если папка пуста — добавляем .gitkeep
             full_path = os.path.join(d)
             if not any(os.scandir(full_path)):
                 open(os.path.join(full_path, ".gitkeep"), "w").close()
